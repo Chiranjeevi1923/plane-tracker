@@ -4,12 +4,28 @@ import {
   Component,
   effect,
   inject,
+  NgZone,
+  OnDestroy,
   OnInit,
 } from '@angular/core';
 import { GoogleMap } from '@angular/google-maps';
+import { Aircraft } from '../../models/aircraft.model';
+import { FlightSimulatorService } from '../../services/flight-simulator.service';
 import { GoogleMapsLoaderService } from '../../services/google-maps-loader.service';
 import { MapThemeService } from '../../services/map-theme.service';
+import {
+  AircraftMarker,
+  createAircraftMarker,
+} from './aircraft-marker.overlay';
 import { MAP_STYLES } from './map-styles';
+
+/** Rendered diameter of the aircraft marker badge (px). */
+const MARKER_SIZE_PX = 40;
+/**
+ * Degrees added to each aircraft's heading before rotating the badge. Set this
+ * if the plane in flight.svg doesn't already point "up" (north) at 0°.
+ */
+const MARKER_ROTATION_OFFSET_DEG = 0;
 
 /**
  * Displays the Google Map that aircraft will eventually be plotted on.
@@ -27,13 +43,25 @@ import { MAP_STYLES } from './map-styles';
   styleUrl: './map.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class MapComponent implements OnInit {
+export class MapComponent implements OnInit, OnDestroy {
   private readonly mapsLoader = inject(GoogleMapsLoaderService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly mapTheme = inject(MapThemeService);
+  private readonly simulator = inject(FlightSimulatorService);
+  private readonly zone = inject(NgZone);
 
   /** The underlying map instance, captured once it initializes. */
   private map?: google.maps.Map;
+
+  /**
+   * Aircraft markers keyed by flightId. These are custom OverlayView instances
+   * (rotatable), managed imperatively — not via the template — so they can't be
+   * declarative <map-marker>s.
+   */
+  private readonly markers = new Map<string, AircraftMarker>();
+
+  /** Handle for the animation loop so we can cancel it on destroy. */
+  private animationFrameId?: number;
 
   /** True once the Maps JS API has loaded and <google-map> can render. */
   mapReady = false;
@@ -109,6 +137,59 @@ export class MapComponent implements OnInit {
     map.fitBounds(this.worldBounds, 1);
     // Apply whatever theme is currently selected (defaults to day).
     map.setOptions({ styles: MAP_STYLES[this.mapTheme.theme()] });
+
+    // Drive the markers from an animation-frame loop, outside Angular so we
+    // don't run change detection ~60×/sec. Each frame we sample the simulator
+    // at the current time and move the marker DOM directly — smooth motion,
+    // no per-frame CD.
+    this.zone.runOutsideAngular(() => {
+      const animate = () => {
+        this.syncAircraftMarkers(this.simulator.sample(Date.now()));
+        this.animationFrameId = requestAnimationFrame(animate);
+      };
+      this.animationFrameId = requestAnimationFrame(animate);
+    });
+  }
+
+  /**
+   * Reconcile the on-map markers with the current fleet: update existing
+   * aircraft, create markers for new ones, and remove markers for any that are
+   * gone. Keyed by flightId so each plane keeps its own marker across ticks.
+   */
+  private syncAircraftMarkers(fleet: Aircraft[]): void {
+    if (!this.map) {
+      return;
+    }
+
+    const present = new Set<string>();
+    for (const plane of fleet) {
+      present.add(plane.flightId);
+      const position: google.maps.LatLngLiteral = {
+        lat: plane.latitude,
+        lng: plane.longitude,
+      };
+
+      const existing = this.markers.get(plane.flightId);
+      if (existing) {
+        existing.update(position, plane.heading);
+      } else {
+        const marker = createAircraftMarker(position, plane.heading, {
+          iconUrl: 'markers/flight.svg',
+          sizePx: MARKER_SIZE_PX,
+          rotationOffsetDeg: MARKER_ROTATION_OFFSET_DEG,
+        });
+        marker.setMap(this.map);
+        this.markers.set(plane.flightId, marker);
+      }
+    }
+
+    // Drop markers for flights no longer in the fleet.
+    for (const [flightId, marker] of this.markers) {
+      if (!present.has(flightId)) {
+        marker.setMap(null);
+        this.markers.delete(flightId);
+      }
+    }
   }
 
   ngOnInit(): void {
@@ -124,5 +205,17 @@ export class MapComponent implements OnInit {
           error instanceof Error ? error.message : 'Failed to load the map.';
         this.cdr.markForCheck();
       });
+  }
+
+  ngOnDestroy(): void {
+    // Stop the animation loop and detach all overlays so nothing leaks if the
+    // component is torn down.
+    if (this.animationFrameId !== undefined) {
+      cancelAnimationFrame(this.animationFrameId);
+    }
+    for (const marker of this.markers.values()) {
+      marker.setMap(null);
+    }
+    this.markers.clear();
   }
 }

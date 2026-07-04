@@ -11,15 +11,15 @@
   height: 54px;
   padding: 0 var(--space-6);
   color: var(--text-primary);
+  // Top-down dark scrim so the brand stays legible while the map still shows
+  // through (the header overlays the map). Kept as a one-off gradient rather
+  // than a token because it's a positional overlay, not a surface colour.
+  background: linear-gradient(#00000080 0%, #0000002b 70%, #0000 100%);
 
   &--night {
     --logo-color: var(--color-accent-soft);
     --title-color: var(--text-primary); // light title on the dark night map
   }
-  // Top-down dark scrim so the brand stays legible while the map still shows
-  // through (the header overlays the map). Kept as a one-off gradient rather
-  // than a token because it's a positional overlay, not a surface colour.
-  background: linear-gradient(#00000080 0%, #0000002b 70%, #0000 100%);
 
   &__brand {
     display: flex;

@@ -1,5 +1,7 @@
 <div class="map">
   @if (mapReady) {
+    <!-- Aircraft markers are custom rotatable OverlayViews managed in the
+         component (see syncAircraftMarkers), not declarative <map-marker>s. -->
     <google-map
       class="map__canvas"
       width="100%"
