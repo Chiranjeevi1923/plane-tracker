@@ -1,0 +1,22 @@
+<div class="map">
+  @if (mapReady) {
+    <google-map
+      class="map__canvas"
+      width="100%"
+      height="100%"
+      [center]="center"
+      [zoom]="zoom"
+      [options]="mapOptions"
+      (mapInitialized)="onMapInitialized($event)"
+    />
+  } @else if (loadError) {
+    <div class="map__status map__status--error" role="alert">
+      <p>Map failed to load.</p>
+      <p class="map__status-detail">{{ loadError }}</p>
+    </div>
+  } @else {
+    <div class="map__status" role="status">
+      <p>Loading map…</p>
+    </div>
+  }
+</div>

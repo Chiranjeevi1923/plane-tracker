@@ -1,0 +1,71 @@
+.app-header {
+  // Logo + title colours, themeable. Day (default) mode uses the brand blue
+  // logo and a dark title (reads over the light day map); the night overrides
+  // sit in the &--night modifier below.
+  --logo-color: var(--color-primary);
+  --title-color: #1f2937; // dark slate for light/day mode
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 54px;
+  padding: 0 var(--space-6);
+  color: var(--text-primary);
+
+  &--night {
+    --logo-color: var(--color-accent-soft);
+    --title-color: var(--text-primary); // light title on the dark night map
+  }
+  // Top-down dark scrim so the brand stays legible while the map still shows
+  // through (the header overlays the map). Kept as a one-off gradient rather
+  // than a token because it's a positional overlay, not a surface colour.
+  background: linear-gradient(#00000080 0%, #0000002b 70%, #0000 100%);
+
+  &__brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    // Extra legibility over whatever map imagery sits behind it.
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  }
+
+  &__icon {
+    display: block;
+    color: var(--logo-color);
+    // Subtle shadow so the logo reads over light day-mode map imagery.
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+  }
+
+  &__title {
+    color: var(--title-color);
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  &__theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    color: var(--text-primary);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    backdrop-filter: blur(var(--glass-blur));
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+
+    &:hover {
+      color: var(--color-accent);
+      background: var(--surface-elevated);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--border-focus);
+      outline-offset: 2px;
+    }
+  }
+}

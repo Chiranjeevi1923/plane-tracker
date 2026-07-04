@@ -1,0 +1,20 @@
+:host {
+  position: relative;
+  display: block;
+  height: 100vh;
+  overflow: hidden;
+}
+
+// Header overlays the map so its transparent gradient reveals the map behind it.
+app-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+}
+
+// Map fills the whole viewport; the header floats on top.
+.app-main {
+  height: 100%;
+}
