@@ -33,4 +33,15 @@
     font-size: 0.85rem;
     opacity: 0.85;
   }
+
+  // Floating aircraft details panel. Sits above the map but below the header
+  // (z-index 10). Vertically centred on the left edge (translateY keeps it
+  // centred regardless of the panel's own height).
+  &__panel {
+    position: absolute;
+    left: var(--space-6);
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+  }
 }

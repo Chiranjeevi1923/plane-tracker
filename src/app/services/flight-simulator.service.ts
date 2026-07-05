@@ -113,6 +113,7 @@ export class FlightSimulatorService {
       // correct even if routes later become curved.
       heading: bearing(position, route.destination),
       speed: Math.round(speedKts),
+      progress,
       departure: new Date(legStartMs).toISOString(),
       // ETA intentionally deferred for now (Phase 2 scope) — filled in later.
       eta: '',

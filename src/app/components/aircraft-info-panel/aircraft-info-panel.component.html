@@ -1,0 +1,125 @@
+<article class="fp">
+  <!-- Banner: aircraft photo -->
+  <div class="fp__banner">
+    <img
+      class="fp__photo"
+      [src]="info().photoUrl"
+      [alt]="info().aircraftType + ' aircraft'"
+      (error)="onPhotoError($event)"
+    />
+    <button
+      type="button"
+      class="fp__close"
+      (click)="close.emit()"
+      aria-label="Close flight details"
+    >
+      ✕
+    </button>
+  </div>
+
+  <!-- Header: flight code + type + airline -->
+  <header class="fp__head">
+    <div class="fp__title">
+      <span class="fp__code">{{ info().flightCode }}</span>
+      <span class="fp__badge">{{ info().aircraftType }}</span>
+    </div>
+    <p class="fp__airline">{{ info().airline }}</p>
+  </header>
+
+  <!-- Route + live progress -->
+  <section class="fp__route" [style.--p]="progressPct() + '%'">
+    <div class="fp__codes">
+      <span class="fp__ap-code">{{ info().origin.code }}</span>
+      <span class="fp__ap-code fp__ap-code--dest">{{ info().destination.code }}</span>
+    </div>
+
+    <div class="fp__progress">
+      <div class="fp__track"><div class="fp__fill"></div></div>
+      <span class="fp__dot fp__dot--start"></span>
+      <span class="fp__dot fp__dot--end"></span>
+      <span class="fp__plane" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path
+            d="M22 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L14 19v-5.5l8 2.5z"
+          />
+        </svg>
+      </span>
+    </div>
+
+    <div class="fp__cities">
+      <span>{{ info().origin.city }}</span>
+      <span>{{ info().destination.city }}</span>
+    </div>
+    <div class="fp__airports">
+      <span>{{ info().origin.airport }}</span>
+      <span>{{ info().destination.airport }}</span>
+    </div>
+  </section>
+
+  <!-- Live stats -->
+  <section class="fp__stats">
+    <div class="fp__stat">
+      <span class="fp__stat-label">Altitude</span>
+      <span class="fp__stat-value">{{ info().altitudeFt | number: '1.0-0' }} ft</span>
+    </div>
+    <div class="fp__stat">
+      <span class="fp__stat-label">Speed</span>
+      <span class="fp__stat-value">{{ info().speedKts | number: '1.0-0' }} kts</span>
+    </div>
+    <div class="fp__stat">
+      <span class="fp__stat-label">Heading</span>
+      <span class="fp__stat-value">{{ info().headingDeg | number: '1.0-0' }}°</span>
+    </div>
+  </section>
+
+  <!-- Action bar -->
+  <nav class="fp__actions" aria-label="Flight actions">
+    <button
+      type="button"
+      class="fp__action"
+      [class.fp__action--active]="isActive('route')"
+      [attr.aria-pressed]="isActive('route')"
+      (click)="action.emit('route')"
+    >
+      <span class="fp__action-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="6" cy="18" r="2.4" />
+          <circle cx="18" cy="6" r="2.4" />
+          <path d="M8 17c6-1 8-3 8-9" />
+        </svg>
+      </span>
+      <span>Route</span>
+    </button>
+    <button
+      type="button"
+      class="fp__action"
+      [class.fp__action--active]="isActive('onboard')"
+      [attr.aria-pressed]="isActive('onboard')"
+      (click)="action.emit('onboard')"
+    >
+      <span class="fp__action-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2 21 7v10l-9 5-9-5V7z" />
+          <path d="M12 22V12M21 7l-9 5M3 7l9 5" />
+        </svg>
+      </span>
+      <span>3D View</span>
+    </button>
+    <button
+      type="button"
+      class="fp__action"
+      [class.fp__action--active]="isActive('follow')"
+      [attr.aria-pressed]="isActive('follow')"
+      (click)="action.emit('follow')"
+    >
+      <span class="fp__action-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="7" />
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+          <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+        </svg>
+      </span>
+      <span>Follow</span>
+    </button>
+  </nav>
+</article>

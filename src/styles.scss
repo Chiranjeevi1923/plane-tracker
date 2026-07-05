@@ -100,6 +100,41 @@
 }
 
 /* =====================================================================
+   Light theme overrides
+   Applied when AppComponent adds `theme-light` to <html> (day mode). Only the
+   *semantic* tokens flip — backgrounds, surfaces, text, borders, glass and
+   shadows. Brand/accent/status/aircraft colours stay constant across themes so
+   the product keeps one identity. Any component built on these tokens gets both
+   themes for free.
+   ===================================================================== */
+html.theme-light {
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-elevated: #eceef2;
+  --sidebar: #ffffff;
+  --modal: #ffffff;
+
+  --text-primary: #18181b;
+  --text-secondary: #3f3f46;
+  --text-muted: #52525b;
+  --text-disabled: #a1a1aa;
+  --text-inverse: #fafafa;
+
+  --border: #d4d4d8;
+  --border-light: #e4e4e7;
+  --divider: #e5e7eb;
+
+  /* Frosted-white glass for panels/cards over the light map. */
+  --glass-bg: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(0, 0, 0, 0.08);
+
+  /* Softer shadows read better on a light background. */
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.14);
+  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.18);
+}
+
+/* =====================================================================
    Global base
    ===================================================================== */
 html,
@@ -113,4 +148,151 @@ body {
 
 * {
   box-sizing: border-box;
+}
+
+/* =====================================================================
+   Aircraft marker + hover card
+   These live in the Google Maps overlay panes (outside any Angular
+   component's DOM), so their styles must be GLOBAL — component-scoped
+   styles can't reach them. Built from the design tokens above.
+   ===================================================================== */
+
+/* Plane tint + halo. The badge is a grayscale SVG loaded via <img>, so CSS
+   can't reach its internal fills — a `filter` chain recolours it (sepia +
+   saturate + hue-rotate shift the greys toward a colour). Tint and halo are
+   delivered as INHERITED custom properties set at the theme level (below),
+   not via `html.theme-light .aircraft-marker__img` — that selector would
+   out-specify the `--hot` hover rule and freeze the colour on hover.
+   Night: no tint + offset dark shadow. Day: amber/gold tint + an offset dark
+   cast shadow so the plane reads as lifted off the light map. Hover: red
+   (both themes). drop-shadow traces the plane's silhouette (transparent-bg
+   img), not a box. */
+:root {
+  --plane-tint: brightness(1);
+  /* Offset so the shadow peeks out from under the plane (a 0-offset shadow is
+     hidden behind the image); darker/blurrier than day so it reads on the near
+     black night map. */
+  --plane-halo: drop-shadow(3px 5px 0.5px rgba(0, 0, 0, 0.65));
+}
+
+html.theme-light {
+  --plane-tint: brightness(1.05) sepia(1) saturate(9) hue-rotate(3deg);
+  --plane-halo: drop-shadow(3px 5px 0.5px rgba(0, 0, 0, 0.35));
+}
+
+.aircraft-marker__img {
+  filter: var(--plane-tint) var(--plane-halo);
+  transition: filter var(--transition-fast);
+}
+
+.aircraft-marker__img--hot {
+  filter: brightness(0.5) sepia(1) saturate(7) hue-rotate(-38deg)
+    var(--plane-halo);
+}
+
+.aircraft-marker__card {
+  position: absolute;
+  /* Float above the plane, horizontally centred and always upright. */
+  bottom: calc(100% + 12px);
+  left: 50%;
+  width: 230px;
+  z-index: 20;
+  overflow: hidden;
+  color: var(--text-primary);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  font-family: var(--font-family);
+  /* Hidden until hovered; fade + rise in. */
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-50%) translateY(6px);
+  transition: opacity var(--transition-fast), transform var(--transition-fast),
+    visibility var(--transition-fast);
+  pointer-events: none;
+}
+
+.aircraft-marker__card--visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.aircraft-card__photo {
+  display: block;
+  width: 100%;
+  // Shorter box (~2.3:1) matches the wide plane photos (~2.2:1), so cover shows
+  // the whole aircraft nose-to-tail instead of zoom-cropping the sides.
+  height: 100px;
+  object-fit: cover;
+  object-position: center;
+}
+
+.aircraft-card__body {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+
+.aircraft-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.aircraft-card__code {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.aircraft-card__type {
+  padding: 2px var(--space-2);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.aircraft-card__route {
+  margin-top: var(--space-2);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aircraft-card__progress {
+  margin-top: var(--space-3);
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-elevated);
+  overflow: hidden;
+}
+
+.aircraft-card__progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--color-accent);
+  transition: width var(--transition-normal);
+}
+
+.aircraft-card__stats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.aircraft-card__dot {
+  color: var(--text-disabled);
 }

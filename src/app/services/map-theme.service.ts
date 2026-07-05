@@ -14,7 +14,7 @@ export type MapTheme = 'day' | 'night';
 @Injectable({ providedIn: 'root' })
 export class MapThemeService {
   /** Current map theme. Components read this reactively. */
-  readonly theme = signal<MapTheme>('night');
+  readonly theme = signal<MapTheme>('day');
 
   /** Flip between day and night. */
   toggle(): void {

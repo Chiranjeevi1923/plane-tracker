@@ -27,6 +27,13 @@ export interface Aircraft {
   heading: number;
   /** Current ground speed in knots. */
   speed: number;
+  /**
+   * Fraction of the current leg completed, 0 (just departed) → 1 (arriving).
+   * Derived from distance travelled; drives the flight-progress bar in the UI.
+   * Real position feeds commonly carry a percent-complete alongside lat/long,
+   * so this stays faithful to the future `flight-position` payload.
+   */
+  progress: number;
   /** Departure time (ISO 8601 timestamp). */
   departure: string;
   /** Estimated time of arrival (ISO 8601 timestamp). */

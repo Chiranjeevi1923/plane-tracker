@@ -37,11 +37,27 @@ export interface FlightSeed {
   aircraft: string;
   /** Which route this flight flies (references ROUTES[].id). */
   routeId: string;
+  /**
+   * Aircraft photo shown in the hover card, served from `public/`. Static
+   * identity data (would ride on `flight-created`, not `flight-position`), so
+   * it lives on the seed rather than the live `Aircraft` record.
+   */
+  photo: string;
 }
 
 /** One seeded flight per route (3 aircraft total). */
 export const SEED_FLIGHTS: FlightSeed[] = [
-  { flightId: '6E-201', airline: 'IndiGo', aircraft: 'Airbus A320neo', routeId: 'HYD-BLR' },
-  { flightId: 'AI-505', airline: 'Air India', aircraft: 'Boeing 737-800', routeId: 'DEL-BOM' },
-  { flightId: 'UK-777', airline: 'Vistara', aircraft: 'Airbus A321', routeId: 'MAA-CCU' },
+  { flightId: '6E-201', airline: 'IndiGo', aircraft: 'Airbus A320neo', routeId: 'HYD-BLR', photo: 'aircraft/6E-201.jpg' },
+  { flightId: 'AI-505', airline: 'Air India', aircraft: 'Boeing 737-800', routeId: 'DEL-BOM', photo: 'aircraft/AI-505.jpg' },
+  { flightId: 'UK-777', airline: 'Vistara', aircraft: 'Airbus A321', routeId: 'MAA-CCU', photo: 'aircraft/UK-777.jpg' },
 ];
+
+/**
+ * Resolve an IATA airport code to its city name for display (e.g. 'HYD' →
+ * 'Hyderabad'). Falls back to the code itself if it isn't a seeded airport, so
+ * the UI never shows a blank. In a live system this lookup would come from an
+ * airports reference service; here it's the static seed map.
+ */
+export function cityForAirport(code: string): string {
+  return AIRPORTS[code]?.city ?? code;
+}

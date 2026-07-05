@@ -11,6 +11,17 @@
       [options]="mapOptions"
       (mapInitialized)="onMapInitialized($event)"
     />
+
+    <!-- Floating details panel for the selected aircraft -->
+    @if (selectedFlightInfo(); as info) {
+      <app-aircraft-info-panel
+        class="map__panel"
+        [info]="info"
+        [activeActions]="activeActions()"
+        (close)="clearSelection()"
+        (action)="onPanelAction($event)"
+      />
+    }
   } @else if (loadError) {
     <div class="map__status map__status--error" role="alert">
       <p>Map failed to load.</p>
