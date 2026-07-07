@@ -50,6 +50,36 @@
   }
 }
 
+.v3d__audio {
+  @extend %glass;
+  position: absolute;
+  top: var(--space-5);
+  right: var(--space-5);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+
+  &:hover {
+    color: var(--color-accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  // Dim while muted so the "off" state reads at a glance.
+  &--muted {
+    color: var(--text-muted);
+  }
+}
+
 .v3d__hud {
   @extend %glass;
   position: absolute;

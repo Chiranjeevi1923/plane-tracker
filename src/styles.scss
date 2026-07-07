@@ -190,6 +190,22 @@ html.theme-light {
     var(--plane-halo);
 }
 
+/* Airport IATA-code chip above the route source/destination pins. Google renders
+   this label in the map overlay (outside Angular), so it's styled globally and
+   themed via tokens. Google sets the text colour inline → override with !important. */
+.route-ap-label {
+  padding: 2px 6px;
+  color: var(--text-primary) !important;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  white-space: nowrap;
+  letter-spacing: 0.03em;
+}
+
 .aircraft-marker__card {
   position: absolute;
   /* Float above the plane, horizontally centred and always upright. */
@@ -226,13 +242,13 @@ html.theme-light {
   width: 100%;
   // Shorter box (~2.3:1) matches the wide plane photos (~2.2:1), so cover shows
   // the whole aircraft nose-to-tail instead of zoom-cropping the sides.
-  height: 100px;
+  height: 85px;
   object-fit: cover;
   object-position: center;
 }
 
 .aircraft-card__body {
-  padding: var(--space-3) var(--space-4) var(--space-4);
+  padding: var(--space-2) var(--space-4) var(--space-3);
 }
 
 .aircraft-card__head {
@@ -242,15 +258,15 @@ html.theme-light {
 }
 
 .aircraft-card__code {
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
 
 .aircraft-card__type {
-  padding: 2px var(--space-2);
+  padding: 1px var(--space-2);
   color: var(--text-secondary);
-  font-size: 0.7rem;
+  font-size: 0.66rem;
   font-weight: 600;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -258,9 +274,9 @@ html.theme-light {
 }
 
 .aircraft-card__route {
-  margin-top: var(--space-2);
+  margin-top: var(--space-1);
   color: var(--text-secondary);
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -268,7 +284,7 @@ html.theme-light {
 }
 
 .aircraft-card__progress {
-  margin-top: var(--space-3);
+  margin-top: var(--space-2);
   height: 4px;
   border-radius: var(--radius-pill);
   background: var(--surface-elevated);
@@ -287,9 +303,9 @@ html.theme-light {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin-top: var(--space-2);
+  margin-top: var(--space-1);
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   font-weight: 500;
 }
 

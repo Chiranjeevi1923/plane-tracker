@@ -457,8 +457,10 @@ export class MapComponent implements OnInit, OnDestroy {
 
     this.originMarker!.setPosition(originPos);
     this.originMarker!.setTitle(origin.name);
+    this.originMarker!.setLabel(this.airportLabel(plane.source));
     this.destMarker!.setPosition(destPos);
     this.destMarker!.setTitle(destination.name);
+    this.destMarker!.setLabel(this.airportLabel(plane.destination));
 
     for (const obj of [
       this.solidLine,
@@ -521,6 +523,19 @@ export class MapComponent implements OnInit, OnDestroy {
     this.routeActive.set(false);
   }
 
+  /**
+   * IATA-code label shown above an airport pin. `className` lets the chip be
+   * styled + themed via global CSS (.route-ap-label); color is forced there.
+   */
+  private airportLabel(code: string): google.maps.MarkerLabel {
+    return {
+      text: code,
+      className: 'route-ap-label',
+      fontSize: '11px',
+      fontWeight: '700',
+    };
+  }
+
   /** Lazily create the route polylines + airport markers (needs google.maps). */
   private ensureRouteObjects(): void {
     if (this.solidLine) {
@@ -563,6 +578,8 @@ export class MapComponent implements OnInit, OnDestroy {
       url,
       scaledSize: new google.maps.Size(pinWidth, pinHeight),
       anchor: new google.maps.Point(pinWidth / 2, pinHeight),
+      // Float the airport-code label just above the top of the pin.
+      labelOrigin: new google.maps.Point(pinWidth / 2, -8),
     });
     this.originMarker = new google.maps.Marker({
       icon: pinIcon('markers/source.png'),

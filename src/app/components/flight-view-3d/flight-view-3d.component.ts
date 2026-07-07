@@ -22,7 +22,9 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { Aircraft } from '../../models/aircraft.model';
 import { FlightSimulatorService } from '../../services/flight-simulator.service';
 import { MapTheme, MapThemeService } from '../../services/map-theme.service';
+import { Clouds, createClouds } from './clouds';
 import { createTerrain, Terrain, TERRAIN_Y } from './terrain';
+import { RadioService } from '../../services/radio.service';
 
 /**
  * Model asset (served from public/). Provide the .obj here; the matching .mtl is
@@ -56,6 +58,33 @@ const CHASE_YAW_OFFSET_DEG = 0;
 /** How quickly the camera eases behind the plane before the user takes over. */
 const CHASE_LERP = 0.06;
 
+/**
+ * World-scroll ("moving plane" illusion): the plane stays at the origin while
+ * the terrain + clouds sweep past it. Rate scales with the plane's speed
+ * relative to REFERENCE_SPEED_KTS.
+ */
+const REFERENCE_SPEED_KTS = 2000;
+const TERRAIN_SCROLL_UNITS = 16; // world units/sec at the reference speed
+const CLOUD_SCROLL_UNITS = 8; // slower than the ground → parallax depth
+/** Rotate the scroll direction if the world flows the wrong way (try ±90/180). */
+const FLOW_YAW_OFFSET_DEG = 0;
+
+/**
+ * Occasional banking (roll about the fuselage): mostly level, but every few
+ * seconds the plane may ease into a gentle bank, hold it, then level out.
+ */
+const BANK_MIN_DEG = 8;
+const BANK_MAX_DEG = 18;
+/** Chance that, when the schedule fires while level, a bank actually starts. */
+const BANK_CHANCE = 0.6;
+/** How long (ms) each state (banked / level) holds before rescheduling. */
+const BANK_HOLD_MIN_MS = 4000;
+const BANK_HOLD_MAX_MS = 10000;
+/** Fly straight this long at the start before the first possible bank. */
+const BANK_STRAIGHT_START_MS = 5000;
+/** Easing rate toward the target roll (per second). */
+const BANK_EASE = 1.5;
+
 type ModelState = 'loading' | 'ready' | 'error';
 
 /**
@@ -76,6 +105,7 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly simulator = inject(FlightSimulatorService);
   private readonly mapTheme = inject(MapThemeService);
+  private readonly radio = inject(RadioService);
   private readonly zone = inject(NgZone);
   private readonly host: HTMLElement = inject(ElementRef).nativeElement;
 
@@ -101,6 +131,8 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
   });
 
   readonly modelState = signal<ModelState>('loading');
+  /** Radio chatter is off by default; the top-right toggle unmutes it. */
+  readonly muted = signal(true);
 
   // Three.js objects.
   private renderer?: THREE.WebGLRenderer;
@@ -109,13 +141,23 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
   private controls?: OrbitControls;
   private model?: THREE.Group; // pivot group; rotated to heading
   private terrain?: Terrain;
+  private clouds?: Clouds;
   private hemi?: THREE.HemisphereLight;
   private sun?: THREE.DirectionalLight;
   private frameId?: number;
   private resizeObserver?: ResizeObserver;
+  private readonly threeClock = new THREE.Clock();
   /** Chase follows the plane until the user first orbits, then hands over. */
   private chaseEnabled = true;
   private readonly desiredCamPos = new THREE.Vector3();
+  /** Accumulated terrain noise offset + a scratch cloud velocity (scroll effect). */
+  private readonly noiseOffset = new THREE.Vector2();
+  private readonly cloudVelocity = new THREE.Vector3();
+  /** Occasional-bank state (roll applied to bankGroup, nested in the pivot). */
+  private bankGroup?: THREE.Group;
+  private bankAngle = 0;
+  private bankTarget = 0;
+  private nextBankChangeAtMs = 0;
 
   constructor() {
     // Keep the scene's sky/ground/lights in sync with the day/night theme.
@@ -126,6 +168,20 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
     // All Three.js work (setup + render loop) runs outside Angular to avoid
     // triggering change detection on every frame.
     this.zone.runOutsideAngular(() => this.initScene());
+  }
+
+  /**
+   * Toggle radio chatter. Unmuting is a valid user gesture, so it can start the
+   * AudioContext; muting stops the chatter. Defaults to muted.
+   */
+  toggleAudio(): void {
+    const nextMuted = !this.muted();
+    this.muted.set(nextMuted);
+    if (nextMuted) {
+      this.radio.disableRadio();
+    } else {
+      this.radio.enableRadio(this.flightId);
+    }
   }
 
   ngOnDestroy(): void {
@@ -146,7 +202,10 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
         }
       }
     });
+    this.clouds?.dispose();
     this.renderer?.dispose();
+    // Radio chatter belongs to the 3D view — silence it when leaving.
+    this.radio.disableRadio();
   }
 
   /** Return to the 2D map. */
@@ -181,6 +240,10 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
     this.terrain.mesh.position.y = TERRAIN_Y;
     this.scene.add(this.terrain.mesh);
 
+    // Drifting billboard clouds for atmosphere.
+    this.clouds = createClouds(this.mapTheme.theme());
+    this.scene.add(this.clouds.group);
+
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
@@ -198,6 +261,9 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
     this.resizeObserver.observe(this.host);
 
     const animate = () => {
+      // One delta per frame (clamped so a background tab doesn't teleport things).
+      const dt = Math.min(this.threeClock.getDelta(), 0.1);
+      let speedKts = 0;
       if (this.model && this.flightId) {
         const plane = this.simulator
           .sample(Date.now())
@@ -207,8 +273,11 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
           this.model.rotation.y = THREE.MathUtils.degToRad(
             MODEL_YAW_OFFSET_DEG - plane.heading,
           );
+          speedKts = plane.speed;
         }
       }
+      this.updateWorldScroll(dt, speedKts);
+      this.updateBank(dt);
       this.updateChaseCamera();
       this.controls?.update();
       this.renderer!.render(this.scene!, this.camera!);
@@ -243,9 +312,16 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
       oriented.rotation.y = THREE.MathUtils.degToRad(MODEL_NOSE_YAW_DEG);
       oriented.add(obj);
 
+      // Bank (roll) group: in pivot-local space the nose points +Z, so rolling
+      // about local Z tilts the wings. Nested inside the pivot so banking never
+      // disturbs the heading yaw or the chase camera.
+      const bank = new THREE.Group();
+      bank.add(oriented);
+      this.bankGroup = bank;
+
       // Wrap in a pivot whose rotation.y is the live heading (drives the chase).
       const pivot = new THREE.Group();
-      pivot.add(oriented);
+      pivot.add(bank);
       this.model = pivot;
       this.scene!.add(pivot);
       this.zone.run(() => this.modelState.set('ready'));
@@ -307,6 +383,70 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
     this.camera.position.lerp(this.desiredCamPos, CHASE_LERP);
   }
 
+  /**
+   * "Moving plane" illusion. The plane is fixed at the origin; instead we scroll
+   * the world past it along the flight direction:
+   *  - Terrain: advance a noise-offset uniform (infinite, no geometry rebuild) so
+   *    hills flow backward past the plane.
+   *  - Clouds: translate the opposite way (toward the tail) and wrap.
+   * Both scale with the plane's speed.
+   */
+  private updateWorldScroll(dt: number, speedKts: number): void {
+    if (!this.model) {
+      return;
+    }
+    const factor = THREE.MathUtils.clamp(speedKts / REFERENCE_SPEED_KTS, 0.25, 2);
+    const yaw =
+      this.model.rotation.y + THREE.MathUtils.degToRad(FLOW_YAW_OFFSET_DEG);
+    const fwdX = Math.sin(yaw);
+    const fwdZ = Math.cos(yaw);
+
+    // Terrain: move the noise sample forward → the surface flows backward.
+    this.noiseOffset.x += fwdX * TERRAIN_SCROLL_UNITS * factor * dt;
+    this.noiseOffset.y += fwdZ * TERRAIN_SCROLL_UNITS * factor * dt;
+    this.terrain?.setOffset(this.noiseOffset.x, this.noiseOffset.y);
+
+    // Clouds: sweep toward the tail (opposite the flight direction).
+    this.cloudVelocity
+      .set(-fwdX, 0, -fwdZ)
+      .multiplyScalar(CLOUD_SCROLL_UNITS * factor);
+    this.clouds?.update(dt, this.cloudVelocity);
+  }
+
+  /**
+   * Occasional gentle banking. A simple two-state schedule: while level, each
+   * time the timer fires there's a BANK_CHANCE of easing into a random ±bank;
+   * while banked, the next fire always returns to level. The roll itself eases
+   * exponentially toward the target so entries/exits are smooth.
+   */
+  private updateBank(dt: number): void {
+    if (!this.bankGroup) {
+      return;
+    }
+    const now = performance.now();
+    // First frame: start level and hold straight before any banking.
+    if (this.nextBankChangeAtMs === 0) {
+      this.nextBankChangeAtMs = now + BANK_STRAIGHT_START_MS;
+      return;
+    }
+    if (now >= this.nextBankChangeAtMs) {
+      if (this.bankTarget === 0 && Math.random() < BANK_CHANCE) {
+        const magnitude =
+          BANK_MIN_DEG + Math.random() * (BANK_MAX_DEG - BANK_MIN_DEG);
+        const sign = Math.random() < 0.5 ? -1 : 1;
+        this.bankTarget = THREE.MathUtils.degToRad(sign * magnitude);
+      } else {
+        this.bankTarget = 0; // level out
+      }
+      this.nextBankChangeAtMs =
+        now + BANK_HOLD_MIN_MS + Math.random() * (BANK_HOLD_MAX_MS - BANK_HOLD_MIN_MS);
+    }
+    // Frame-rate-independent exponential ease toward the target roll.
+    const k = 1 - Math.exp(-BANK_EASE * dt);
+    this.bankAngle += (this.bankTarget - this.bankAngle) * k;
+    this.bankGroup.rotation.z = this.bankAngle;
+  }
+
   private onResize(): void {
     if (!this.renderer || !this.camera) {
       return;
@@ -328,6 +468,7 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
     this.scene.background = sky;
     (this.scene.fog as THREE.Fog).color.copy(sky);
     this.terrain?.recolor(theme);
+    this.clouds?.recolor(theme);
     if (this.hemi) {
       this.hemi.color.set(day ? '#ffffff' : '#9fb8d6');
       this.hemi.groundColor.set(day ? '#c9c1a8' : '#0a1018');
