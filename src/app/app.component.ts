@@ -1,4 +1,5 @@
 import { Component, effect, inject } from '@angular/core';
+import { RouterOutlet } from '@angular/router';
 import { HeaderComponent } from './components/header/header.component';
 import { MapComponent } from './components/map/map.component';
 import { MapThemeService } from './services/map-theme.service';
@@ -6,7 +7,7 @@ import { MapThemeService } from './services/map-theme.service';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [HeaderComponent, MapComponent],
+  imports: [HeaderComponent, MapComponent, RouterOutlet],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })

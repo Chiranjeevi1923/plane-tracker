@@ -1,0 +1,148 @@
+:host {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: block;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+}
+
+.v3d__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Shared glass surface for the floating controls. */
+%glass {
+  color: var(--text-primary);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+.v3d__back {
+  @extend %glass;
+  position: absolute;
+  top: var(--space-5);
+  left: var(--space-5);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+
+  &:hover {
+    color: var(--color-accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+  }
+}
+
+.v3d__hud {
+  @extend %glass;
+  position: absolute;
+  left: var(--space-5);
+  bottom: var(--space-5);
+  width: 240px;
+  padding: var(--space-4);
+
+  &--missing {
+    width: auto;
+    color: var(--text-secondary);
+  }
+}
+
+.v3d__hud-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.v3d__code {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.v3d__badge {
+  padding: 2px var(--space-2);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.v3d__route {
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.v3d__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+
+  dt {
+    color: var(--text-muted);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  dd {
+    margin: 2px 0 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+}
+
+.v3d__status {
+  @extend %glass;
+  position: absolute;
+  top: var(--space-5);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 24rem;
+  padding: var(--space-3) var(--space-4);
+  font-size: 0.85rem;
+  text-align: center;
+
+  &--error {
+    color: var(--error-light);
+  }
+
+  code {
+    font-family: var(--font-family), monospace;
+  }
+}
+
+.v3d__hint {
+  position: absolute;
+  right: var(--space-5);
+  bottom: var(--space-5);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  background: var(--glass-bg);
+  border-radius: var(--radius-pill);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}

@@ -1,0 +1,57 @@
+<canvas #canvas class="v3d__canvas"></canvas>
+
+<button type="button" class="v3d__back" (click)="back()">
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M15 18l-6-6 6-6" />
+  </svg>
+  <span>Back</span>
+</button>
+
+@if (modelState() === 'loading') {
+  <div class="v3d__status" role="status">Loading 3D model…</div>
+} @else if (modelState() === 'error') {
+  <div class="v3d__status v3d__status--error" role="alert">
+    Couldn't load the 3D model. Check that the file exists in
+    <code>public/models/</code>.
+  </div>
+}
+
+@if (flight(); as f) {
+  <div class="v3d__hud">
+    <div class="v3d__hud-head">
+      <span class="v3d__code">{{ f.flightId }}</span>
+      <span class="v3d__badge">{{ f.aircraft }}</span>
+    </div>
+    <div class="v3d__route">{{ f.source }} → {{ f.destination }}</div>
+    <dl class="v3d__stats">
+      <div>
+        <dt>Altitude</dt>
+        <dd>{{ f.altitude | number: '1.0-0' }} ft</dd>
+      </div>
+      <div>
+        <dt>Speed</dt>
+        <dd>{{ f.speed | number: '1.0-0' }} kts</dd>
+      </div>
+      <div>
+        <dt>Heading</dt>
+        <dd>{{ f.heading | number: '1.0-0' }}°</dd>
+      </div>
+    </dl>
+  </div>
+} @else {
+  <div class="v3d__hud v3d__hud--missing">
+    Flight <strong>{{ flightId }}</strong> not found.
+  </div>
+}
+
+<p class="v3d__hint">Drag to orbit · scroll to zoom</p>

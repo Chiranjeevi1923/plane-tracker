@@ -11,6 +11,7 @@ import {
   signal,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { Router } from '@angular/router';
 import { GoogleMap } from '@angular/google-maps';
 import { interval } from 'rxjs';
 import {
@@ -76,6 +77,7 @@ export class MapComponent implements OnInit, OnDestroy {
   private readonly mapTheme = inject(MapThemeService);
   private readonly simulator = inject(FlightSimulatorService);
   private readonly zone = inject(NgZone);
+  private readonly router = inject(Router);
 
   /** The underlying map instance, captured once it initializes. */
   private map?: google.maps.Map;
@@ -388,7 +390,13 @@ export class MapComponent implements OnInit, OnDestroy {
       this.toggleRoute();
       return;
     }
-    // 'onboard' (3D view) is reserved for the Three.js phase.
+    if (action === 'onboard') {
+      // Navigate to the standalone 3D flight view for the selected aircraft.
+      const flightId = this.selectedFlightId();
+      if (flightId) {
+        this.router.navigate(['/3d-view', flightId]);
+      }
+    }
   }
 
   /** Toggle follow mode — keep the map centred on the selected plane. */
