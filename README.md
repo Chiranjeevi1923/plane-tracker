@@ -1,6 +1,7 @@
 # PlaneTracker
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 19.2.23.
+<img width="986" height="552" alt="image" src="https://github.com/user-attachments/assets/709063d4-58c7-4883-8668-4171a2f5e9f7" />
+
 
 ## Development server
 
