@@ -5,8 +5,8 @@ import { FlightSeed, ROUTES, SEED_FLIGHTS } from '../data/seed-data';
 import { bearing, haversineDistanceNm, interpolatePosition } from '../utils/geo';
 
 /** Cruise profile. Each flight gets a random speed in this range. */
-const MIN_SPEED_KTS = 1000;
-const MAX_SPEED_KTS = 3000;
+const MIN_SPEED_KTS = 2000;
+const MAX_SPEED_KTS = 3500;
 const CRUISE_ALTITUDE_FT = 35000;
 /** Fractions of the route spent climbing / descending (rest is cruise). */
 const CLIMB_FRACTION = 0.15;

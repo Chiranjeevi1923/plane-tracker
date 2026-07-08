@@ -50,11 +50,11 @@
   }
 }
 
-.v3d__audio {
+/* Shared square icon button for the top-right controls (theme + audio). */
+%icon-button {
   @extend %glass;
   position: absolute;
   top: var(--space-5);
-  right: var(--space-5);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -73,10 +73,53 @@
     outline: 2px solid var(--border-focus);
     outline-offset: 2px;
   }
+}
+
+.v3d__audio {
+  @extend %icon-button;
+  right: var(--space-5);
 
   // Dim while muted so the "off" state reads at a glance.
   &--muted {
     color: var(--text-muted);
+  }
+}
+
+/* Day/night toggle, immediately left of the audio button (40px + gap). */
+.v3d__theme {
+  @extend %icon-button;
+  right: calc(var(--space-5) + 40px + var(--space-3));
+}
+
+/* Bottom-centre toggle between the third-person and cockpit cameras. */
+.v3d__cockpit {
+  @extend %glass;
+  position: absolute;
+  left: 50%;
+  bottom: var(--space-5);
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+
+  &:hover {
+    color: var(--color-accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  // Accent while the cockpit camera is live so the mode reads at a glance.
+  &--active {
+    color: var(--color-accent);
   }
 }
 

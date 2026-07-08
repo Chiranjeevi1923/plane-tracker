@@ -23,7 +23,9 @@ import { Aircraft } from '../../models/aircraft.model';
 import { FlightSimulatorService } from '../../services/flight-simulator.service';
 import { MapTheme, MapThemeService } from '../../services/map-theme.service';
 import { Clouds, createClouds } from './clouds';
+import { createStars, Stars } from './stars';
 import { createTerrain, Terrain, TERRAIN_Y } from './terrain';
+import { createWingTrails, WingTrails } from './wing-trails';
 import { RadioService } from '../../services/radio.service';
 
 /**
@@ -49,6 +51,16 @@ const MODEL_PITCH_OFFSET_DEG = -90;
  * from above; flip the sign if it rotates the wrong way.
  */
 const MODEL_NOSE_YAW_DEG = -90;
+
+/**
+ * Cockpit (first-person) camera: eye position relative to the aircraft origin —
+ * a little above the fuselage centreline and nudged toward the nose — looking
+ * at a point far ahead along the heading. The model is hidden while in the
+ * cockpit (the camera sits inside the fuselage) and orbit controls are off.
+ */
+const COCKPIT_EYE_HEIGHT = 1.4;
+const COCKPIT_EYE_FORWARD = 2;
+const COCKPIT_LOOKAHEAD = 120;
 
 /** Third-person chase camera (behind + above the aircraft). */
 const CHASE_DISTANCE = 18;
@@ -133,6 +145,15 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
   readonly modelState = signal<ModelState>('loading');
   /** Radio chatter is off by default; the top-right toggle unmutes it. */
   readonly muted = signal(true);
+  /** True while the first-person cockpit camera is active (bottom-centre toggle). */
+  readonly cockpitView = signal(false);
+  /**
+   * Shared day/night theme, exposed for the toggle button. The header's toggle
+   * is hidden behind this fullscreen view, so the 3D view has its own; both
+   * drive the same MapThemeService signal (the scene reacts via the effect in
+   * the constructor).
+   */
+  readonly theme = this.mapTheme.theme;
 
   // Three.js objects.
   private renderer?: THREE.WebGLRenderer;
@@ -142,6 +163,10 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
   private model?: THREE.Group; // pivot group; rotated to heading
   private terrain?: Terrain;
   private clouds?: Clouds;
+  /** Wind streaks off the wings; lives in the bank group so it rolls too. */
+  private wingTrails?: WingTrails;
+  /** Night-sky starfield; visible only in the night theme. */
+  private stars?: Stars;
   private hemi?: THREE.HemisphereLight;
   private sun?: THREE.DirectionalLight;
   private frameId?: number;
@@ -170,6 +195,11 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
     this.zone.runOutsideAngular(() => this.initScene());
   }
 
+  /** Flip the shared day/night theme (scene + map both react to the signal). */
+  toggleTheme(): void {
+    this.mapTheme.toggle();
+  }
+
   /**
    * Toggle radio chatter. Unmuting is a valid user gesture, so it can start the
    * AudioContext; muting stops the chatter. Defaults to muted.
@@ -181,6 +211,27 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
       this.radio.disableRadio();
     } else {
       this.radio.enableRadio(this.flightId);
+    }
+  }
+
+  /**
+   * Toggle between the third-person view and the cockpit (first-person) camera.
+   * Entering hides the aircraft model (the camera sits inside the fuselage) and
+   * disables orbit controls — the cockpit camera is fixed on the heading.
+   * Exiting restores the model, re-enables orbiting, and re-arms the chase so
+   * the camera eases back behind the plane.
+   */
+  toggleCockpit(): void {
+    const entering = !this.cockpitView();
+    this.cockpitView.set(entering);
+    if (this.model) {
+      this.model.visible = !entering;
+    }
+    if (this.controls) {
+      this.controls.enabled = !entering;
+    }
+    if (!entering) {
+      this.chaseEnabled = true; // glide back to the third-person chase position
     }
   }
 
@@ -203,6 +254,8 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
       }
     });
     this.clouds?.dispose();
+    this.wingTrails?.dispose();
+    this.stars?.dispose();
     this.renderer?.dispose();
     // Radio chatter belongs to the 3D view — silence it when leaving.
     this.radio.disableRadio();
@@ -244,6 +297,10 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
     this.clouds = createClouds(this.mapTheme.theme());
     this.scene.add(this.clouds.group);
 
+    // Starfield dome, shown only at night (applyTheme flips its visibility).
+    this.stars = createStars(this.mapTheme.theme());
+    this.scene.add(this.stars.group);
+
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
@@ -278,8 +335,15 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
       }
       this.updateWorldScroll(dt, speedKts);
       this.updateBank(dt);
-      this.updateChaseCamera();
-      this.controls?.update();
+      this.wingTrails?.update(dt, speedKts);
+      if (this.cockpitView()) {
+        // Fixed pilot's-eye camera; OrbitControls are disabled and must not
+        // update() here — it would overwrite the manual lookAt orientation.
+        this.updateCockpitCamera();
+      } else {
+        this.updateChaseCamera();
+        this.controls?.update();
+      }
       this.renderer!.render(this.scene!, this.camera!);
       this.frameId = requestAnimationFrame(animate);
     };
@@ -319,9 +383,17 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
       bank.add(oriented);
       this.bankGroup = bank;
 
+      // Wind streaks off the wings — added to the bank group so they yaw with
+      // the heading and roll with the banking, like part of the airframe.
+      this.wingTrails = createWingTrails();
+      bank.add(this.wingTrails.group);
+
       // Wrap in a pivot whose rotation.y is the live heading (drives the chase).
       const pivot = new THREE.Group();
       pivot.add(bank);
+      // If the user switched to the cockpit while the model was still loading,
+      // it must arrive hidden (the camera sits inside the fuselage).
+      pivot.visible = !this.cockpitView();
       this.model = pivot;
       this.scene!.add(pivot);
       this.zone.run(() => this.modelState.set('ready'));
@@ -359,6 +431,37 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
         );
       },
     );
+  }
+
+  /**
+   * First-person cockpit camera: eye just above/ahead of the aircraft origin,
+   * looking at a point far ahead along the live heading, with the view rolling
+   * along with the occasional banking for immersion.
+   */
+  private updateCockpitCamera(): void {
+    if (!this.camera || !this.model) {
+      return;
+    }
+    // Forward unit vector for the current heading (same convention as the
+    // chase camera, which sits at the negated direction behind the plane).
+    const yaw = this.model.rotation.y;
+    const fwdX = Math.sin(yaw);
+    const fwdZ = Math.cos(yaw);
+    this.camera.position.set(
+      fwdX * COCKPIT_EYE_FORWARD,
+      COCKPIT_EYE_HEIGHT,
+      fwdZ * COCKPIT_EYE_FORWARD,
+    );
+    // Level view: the look-at point sits at eye height, so the horizon is
+    // centred; distance just needs to be "far" (within the fog falloff).
+    this.camera.lookAt(
+      fwdX * COCKPIT_LOOKAHEAD,
+      COCKPIT_EYE_HEIGHT,
+      fwdZ * COCKPIT_LOOKAHEAD,
+    );
+    // Roll the view with the bank (rotate about the camera's view axis). Negate
+    // if the horizon appears to tilt with the wings instead of against them.
+    this.camera.rotateZ(this.bankAngle);
   }
 
   /**
@@ -469,6 +572,7 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
     (this.scene.fog as THREE.Fog).color.copy(sky);
     this.terrain?.recolor(theme);
     this.clouds?.recolor(theme);
+    this.stars?.setTheme(theme);
     if (this.hemi) {
       this.hemi.color.set(day ? '#ffffff' : '#9fb8d6');
       this.hemi.groundColor.set(day ? '#c9c1a8' : '#0a1018');

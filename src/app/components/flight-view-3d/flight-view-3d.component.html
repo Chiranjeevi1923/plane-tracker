@@ -19,6 +19,57 @@
 
 <button
   type="button"
+  class="v3d__theme"
+  (click)="toggleTheme()"
+  [attr.aria-label]="
+    theme() === 'day' ? 'Switch to night mode' : 'Switch to day mode'
+  "
+  [attr.aria-pressed]="theme() === 'night'"
+  [title]="theme() === 'day' ? 'Night mode' : 'Day mode'"
+>
+  @if (theme() === 'day') {
+    <!-- Moon: click to switch to night mode -->
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  } @else {
+    <!-- Sun: click to switch back to day mode -->
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="5" />
+      <line x1="12" y1="1" x2="12" y2="3" />
+      <line x1="12" y1="21" x2="12" y2="23" />
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+      <line x1="1" y1="12" x2="3" y2="12" />
+      <line x1="21" y1="12" x2="23" y2="12" />
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+    </svg>
+  }
+</button>
+
+<button
+  type="button"
   class="v3d__audio"
   [class.v3d__audio--muted]="muted()"
   (click)="toggleAudio()"
@@ -85,4 +136,34 @@
   </div>
 }
 
-<p class="v3d__hint">Drag to orbit · scroll to zoom</p>
+<button
+  type="button"
+  class="v3d__cockpit"
+  [class.v3d__cockpit--active]="cockpitView()"
+  (click)="toggleCockpit()"
+  [attr.aria-pressed]="cockpitView()"
+>
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+  <span>{{ cockpitView() ? '3D View' : 'Cockpit View' }}</span>
+</button>
+
+<p class="v3d__hint">
+  @if (cockpitView()) {
+    Cockpit view · fixed camera
+  } @else {
+    Drag to orbit · scroll to zoom
+  }
+</p>

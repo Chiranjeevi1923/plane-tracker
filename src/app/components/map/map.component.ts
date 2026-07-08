@@ -47,6 +47,13 @@ const MARKER_MAX_ALTITUDE_FT = 35000;
  */
 const MARKER_ROTATION_OFFSET_DEG = 0;
 
+/**
+ * How often follow mode re-centres the map on the plane. The animation loop runs
+ * ~60×/sec; panning every frame drifts the map continuously, so instead we step
+ * to the plane's latest position on this cadence.
+ */
+const FOLLOW_PAN_INTERVAL_MS = 5000;
+
 /** Marker size for a given altitude, clamped between MIN and MAX. */
 function markerSizeForAltitude(altitudeFt: number): number {
   const t = Math.min(1, Math.max(0, altitudeFt / MARKER_MAX_ALTITUDE_FT));
@@ -104,6 +111,12 @@ export class MapComponent implements OnInit, OnDestroy {
   private readonly routeActive = signal(false);
   /** True while "follow mode" keeps the map centred on the selected plane. */
   private readonly followActive = signal(false);
+  /**
+   * performance.now() of the last follow re-centre. Follow mode pans on the
+   * FOLLOW_PAN_INTERVAL_MS cadence rather than every frame; reset to 0 when
+   * follow turns on so the first frame centres immediately.
+   */
+  private lastFollowPanMs = 0;
   private solidLine?: google.maps.Polyline;
   private dashedLine?: google.maps.Polyline;
   private originMarker?: google.maps.Marker;
@@ -282,8 +295,18 @@ export class MapComponent implements OnInit, OnDestroy {
     }
 
     const selectedId = this.selectedFlightId();
+    // While the route path is shown for a flight — by either the Route action or
+    // Follow mode — we focus on just that flight: every other aircraft marker is
+    // hidden so the route reads clearly.
+    const soloView =
+      (this.routeActive() || this.followActive()) && selectedId !== null;
     const present = new Set<string>();
     for (const plane of fleet) {
+      if (soloView && plane.flightId !== selectedId) {
+        // Hidden flight — skip it so it isn't added to `present`; any existing
+        // marker for it is detached in the cleanup pass below.
+        continue;
+      }
       present.add(plane.flightId);
       const position: google.maps.LatLngLiteral = {
         lat: plane.latitude,
@@ -399,17 +422,39 @@ export class MapComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Toggle follow mode — keep the map centred on the selected plane. */
+  /**
+   * Toggle follow mode. Enabling it draws the route path (like the Route action)
+   * but WITHOUT fitting/zooming — the view stays at the current zoom and simply
+   * pans to keep the plane centred (updateFollow only calls setCenter). Follow
+   * and Route are mutually exclusive, so turning follow on clears the Route
+   * action's highlight; turning it off removes the path.
+   */
   private toggleFollow(): void {
-    if (!this.selectedAircraft() || !this.map) {
+    const plane = this.selectedAircraft();
+    if (!plane || !this.map) {
       return;
     }
-    this.followActive.set(!this.followActive());
+    if (this.followActive()) {
+      this.hideRoute(); // turn follow off → remove the path
+      return;
+    }
+    this.routeActive.set(false); // mutual exclusion with the Route action
+    this.followActive.set(true);
+    this.lastFollowPanMs = 0; // centre on the plane immediately on the next frame
+    this.showRouteFor(plane, false); // draw the path, but keep the current zoom
   }
 
-  /** Keep the map centred on the selected plane while follow mode is on. */
+  /**
+   * Keep the map centred on the selected plane while follow mode is on. Called
+   * every animation frame, but it only re-centres every FOLLOW_PAN_INTERVAL_MS
+   * so the map steps to the plane periodically instead of panning continuously.
+   */
   private updateFollow(fleet: Aircraft[]): void {
     if (!this.followActive() || !this.map) {
+      return;
+    }
+    const now = performance.now();
+    if (now - this.lastFollowPanMs < FOLLOW_PAN_INTERVAL_MS) {
       return;
     }
     const flightId = this.selectedFlightId();
@@ -417,11 +462,19 @@ export class MapComponent implements OnInit, OnDestroy {
       ? fleet.find((p) => p.flightId === flightId)
       : undefined;
     if (plane) {
-      this.map.setCenter({ lat: plane.latitude, lng: plane.longitude });
+      // panTo animates the move (smooth glide) rather than jumping like
+      // setCenter, so each periodic re-centre eases toward the plane.
+      this.map.panTo({ lat: plane.latitude, lng: plane.longitude });
+      this.lastFollowPanMs = now;
     }
   }
 
-  /** Toggle the flown/remaining route overlay for the selected flight. */
+  /**
+   * Toggle the flown/remaining route overlay for the selected flight. Draws the
+   * same path as follow mode but also fits the whole route into view. Route and
+   * follow are mutually exclusive: enabling the route turns follow off (mirrors
+   * toggleFollow) so only one action is ever active.
+   */
   private toggleRoute(): void {
     if (this.routeActive()) {
       this.hideRoute();
@@ -429,22 +482,24 @@ export class MapComponent implements OnInit, OnDestroy {
     }
     const plane = this.selectedAircraft();
     if (plane) {
-      this.showRouteFor(plane);
+      this.followActive.set(false); // mutual exclusion with the Follow action
+      this.routeActive.set(true);
+      this.showRouteFor(plane, true); // draw the path and fit it into view
     }
   }
 
   /** Clear per-flight modes (route + follow) when selection changes or clears. */
   private resetFlightModes(): void {
-    this.hideRoute();
-    this.followActive.set(false);
+    this.hideRoute(); // detaches the path and clears both action signals
   }
 
   /**
    * Show the route for a flight: solid line origin→plane, dashed plane→dest,
-   * airport markers at each end, then fit the whole route into the viewport
-   * (padded on the left so it clears the details panel).
+   * airport markers at each end. When `fit` is true the whole route is framed in
+   * the viewport (Route action); when false the current zoom is left untouched
+   * (Follow mode just pans). The caller sets the route/follow signal first.
    */
-  private showRouteFor(plane: Aircraft): void {
+  private showRouteFor(plane: Aircraft, fit: boolean): void {
     const origin = AIRPORTS[plane.source];
     const destination = AIRPORTS[plane.destination];
     if (!origin || !destination || !this.map) {
@@ -470,21 +525,30 @@ export class MapComponent implements OnInit, OnDestroy {
     ]) {
       obj?.setMap(this.map);
     }
-    this.routeActive.set(true);
     this.updateRoute([plane]); // draw the initial split immediately
 
-    // Fit origin + plane + destination into view; extra left padding keeps the
-    // route clear of the details panel on the left edge.
-    const bounds = new google.maps.LatLngBounds();
-    bounds.extend(originPos);
-    bounds.extend({ lat: plane.latitude, lng: plane.longitude });
-    bounds.extend(destPos);
-    this.map.fitBounds(bounds, { top: 90, right: 60, bottom: 60, left: 380 });
+    if (fit) {
+      // Fit origin + plane + destination into view; extra left padding keeps the
+      // route clear of the details panel on the left edge.
+      const bounds = new google.maps.LatLngBounds();
+      bounds.extend(originPos);
+      bounds.extend({ lat: plane.latitude, lng: plane.longitude });
+      bounds.extend(destPos);
+      this.map.fitBounds(bounds, { top: 90, right: 60, bottom: 60, left: 380 });
+    }
   }
 
-  /** Update the flown/remaining split each frame while the route is shown. */
+  /**
+   * Update the flown/remaining split each frame while the route path is shown.
+   * The path is drawn by both the Route action and Follow mode, so this runs
+   * while either is active.
+   */
   private updateRoute(fleet: Aircraft[]): void {
-    if (!this.routeActive() || !this.solidLine || !this.dashedLine) {
+    if (
+      (!this.routeActive() && !this.followActive()) ||
+      !this.solidLine ||
+      !this.dashedLine
+    ) {
       return;
     }
     const flightId = this.selectedFlightId();
@@ -510,7 +574,11 @@ export class MapComponent implements OnInit, OnDestroy {
     ]);
   }
 
-  /** Detach the route overlays (keeps the objects for reuse). */
+  /**
+   * Detach the route overlays (keeps the objects for reuse) and clear both
+   * action signals. Hiding the path always exits both Route and Follow, so this
+   * is the single teardown for either action being turned off.
+   */
   private hideRoute(): void {
     for (const obj of [
       this.solidLine,
@@ -521,6 +589,7 @@ export class MapComponent implements OnInit, OnDestroy {
       obj?.setMap(null);
     }
     this.routeActive.set(false);
+    this.followActive.set(false);
   }
 
   /**

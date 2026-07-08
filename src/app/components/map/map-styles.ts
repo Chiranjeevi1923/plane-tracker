@@ -4,10 +4,11 @@ import type { MapTheme } from '../../services/map-theme.service';
  * Google Maps style definitions per theme, applied via
  * `map.setOptions({ styles })`.
  *
- * `day` is a muted, slightly-dimmed grey map (rather than Google's default
- * colourful one) so the light aircraft markers stand out — the "grey layer"
- * effect, done by restyling the base tiles so the markers themselves aren't
- * dimmed. `night` is the standard dark style.
+ * `day` is a muted-colourful map: real hues (green land, blue water, green
+ * parks) toned down by a light global "grey wash" (a gentle desaturate + slight
+ * darken applied to all geometry). This keeps the map lively without letting it
+ * compete with the aircraft markers — the amber-tinted, shadowed planes still
+ * read clearly against the softened colours. `night` is the standard dark style.
  *
  * Detail (POI icons + labels) is hidden when zoomed out and revealed past
  * LABEL_ZOOM_THRESHOLD (see mapStyleFor) so the world view stays clean and the
@@ -20,18 +21,25 @@ import type { MapTheme } from '../../services/map-theme.service';
 /** At/above this zoom, POI icons and labels are shown; below it they're hidden. */
 export const LABEL_ZOOM_THRESHOLD = 7;
 
-/** Muted grey day map so the (light) aircraft markers are eye-catchable. */
+/** Muted-colourful day map: real hues under a light grey wash. */
 const DAY_STYLE: google.maps.MapTypeStyle[] = [
-  // Desaturate + slightly darken everything → calm grey canvas.
-  { elementType: 'geometry', stylers: [{ saturation: -55 }, { lightness: -8 }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#5b6470' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#eef1f3' }] },
-  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#dee2e5' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#bcc6cd' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#cdd2d6' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#c1c7cc' }] },
-  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#d2d7da' }] },
-  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#cdd6cf' }] },
+  // Global "grey wash": a gentle desaturate + slight darken over all geometry.
+  // Much softer than a full greyscale so the hues below survive — this is the
+  // grey overlay that keeps the map from overpowering the plane markers.
+  { elementType: 'geometry', stylers: [{ saturation: -22 }, { lightness: -4 }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#4a5560' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#f2f4f5' }] },
+  // Colourful-but-muted base features.
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#d7dfc9' }] }, // soft sage land
+  { featureType: 'landscape.natural.terrain', elementType: 'geometry', stylers: [{ color: '#cdd8bd' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#a6c6dd' }] }, // muted sea blue
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#cdd6c4' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#b6cea6' }] }, // green parks
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#e7eae2' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#d8ddd2' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#ecdfc4' }] }, // subtle warm highways
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#e0d3b4' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#b3bda8' }] },
 ];
 
 /** Standard dark night map. */
