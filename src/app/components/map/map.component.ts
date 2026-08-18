@@ -54,6 +54,17 @@ const MARKER_ROTATION_OFFSET_DEG = 0;
  */
 const FOLLOW_PAN_INTERVAL_MS = 5000;
 
+/**
+ * URL format `/lat,lng/zoom` (FlightRadar24 style). Lat/lng use 4 decimals
+ * (~11m — precise enough to be meaningful, short enough to read); zoom keeps
+ * up to 2 decimals (fractional zoom is enabled) with trailing zeros stripped.
+ * Accepts the same range on parse.
+ */
+const URL_VIEW_PATTERN =
+  /^\/(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\/?$/;
+const URL_COORD_DECIMALS = 4;
+const URL_ZOOM_DECIMALS = 2;
+
 /** Marker size for a given altitude, clamped between MIN and MAX. */
 function markerSizeForAltitude(altitudeFt: number): number {
   const t = Math.min(1, Math.max(0, altitudeFt / MARKER_MAX_ALTITUDE_FT));
@@ -237,13 +248,29 @@ export class MapComponent implements OnInit, OnDestroy {
   onMapInitialized(map: google.maps.Map): void {
     // Capture the instance so the theme effect can restyle it on toggle.
     this.map = map;
-    map.fitBounds(this.worldBounds, 1);
+
+    // Initial view: honour a shareable /lat,lng/zoom URL if present, else fit
+    // the whole world (first visit / bare `/`). fitBounds recomputes both
+    // center and zoom to frame these bounds; setCenter+setZoom is the direct
+    // equivalent when the URL already specifies both.
+    const view = this.parseUrlView();
+    if (view) {
+      map.setCenter({ lat: view.lat, lng: view.lng });
+      map.setZoom(view.zoom);
+    } else {
+      map.fitBounds(this.worldBounds, 1);
+    }
     // Apply the muted/grey style for the current theme + zoom.
     this.applyMapStyle();
 
     // Re-apply when zoom crosses the label threshold (applyMapStyle no-ops
     // otherwise, so frequent fractional-zoom events stay cheap).
     map.addListener('zoom_changed', () => this.applyMapStyle());
+
+    // Sync URL after every pan/zoom settles. `idle` is the Maps API's built-in
+    // "movement done" signal, so it's naturally debounced (fires once when the
+    // user stops, not per-frame during a drag) — no extra debounce needed.
+    map.addListener('idle', () => this.zone.run(() => this.writeUrlView()));
 
     // Clicking empty map (not a marker) clears the selection / closes the panel.
     map.addListener('click', () => this.zone.run(() => this.clearSelection()));
@@ -262,6 +289,72 @@ export class MapComponent implements OnInit, OnDestroy {
       };
       this.animationFrameId = requestAnimationFrame(animate);
     });
+  }
+
+  /**
+   * Parse the current URL's `/lat,lng/zoom` segment (FR24-style shareable view).
+   * Returns null if the URL isn't in that form, the numbers are out of range,
+   * or the app is on the 3D-view route (where the URL means something else).
+   * The map bootstraps from this on init; if it's null, fitBounds runs instead.
+   */
+  private parseUrlView(): { lat: number; lng: number; zoom: number } | null {
+    const url = this.router.url.split('?')[0].split('#')[0];
+    if (url === '/' || url.startsWith('/3d-view')) {
+      return null;
+    }
+    const match = URL_VIEW_PATTERN.exec(url);
+    if (!match) {
+      return null;
+    }
+    const lat = parseFloat(match[1]);
+    const lng = parseFloat(match[2]);
+    const zoom = parseFloat(match[3]);
+    if (!isFinite(lat) || !isFinite(lng) || !isFinite(zoom)) {
+      return null;
+    }
+    // Clamp to the ranges the map itself enforces (worldBounds + min/maxZoom).
+    if (lat < this.worldBounds.south || lat > this.worldBounds.north) {
+      return null;
+    }
+    if (lng < this.worldBounds.west || lng > this.worldBounds.east) {
+      return null;
+    }
+    const minZoom = this.mapOptions.minZoom ?? 0;
+    const maxZoom = this.mapOptions.maxZoom ?? 22;
+    if (zoom < minZoom || zoom > maxZoom) {
+      return null;
+    }
+    return { lat, lng, zoom };
+  }
+
+  /**
+   * Write the map's current center+zoom into the URL as `/lat,lng/zoom`,
+   * using `replaceUrl` so pan/zoom doesn't pollute the browser back-stack.
+   * Skipped on the 3D-view route (we don't own that URL) and when the value
+   * would be identical to what's already there (no-op guard).
+   */
+  private writeUrlView(): void {
+    if (!this.map) {
+      return;
+    }
+    if (this.router.url.startsWith('/3d-view')) {
+      return;
+    }
+    const center = this.map.getCenter();
+    const zoom = this.map.getZoom();
+    if (!center || zoom === undefined) {
+      return;
+    }
+    const lat = center.lat().toFixed(URL_COORD_DECIMALS);
+    const lng = center.lng().toFixed(URL_COORD_DECIMALS);
+    // Fractional-zoom-friendly, but trim trailing zeros so /11 stays as /11
+    // (not /11.00) — same value, shorter to share.
+    const z = zoom.toFixed(URL_ZOOM_DECIMALS).replace(/\.?0+$/, '');
+    const path = `/${lat},${lng}/${z}`;
+    if (path === this.router.url) {
+      return;
+    }
+    this.router.navigateByUrl(path, { replaceUrl: true });
   }
 
   /**
