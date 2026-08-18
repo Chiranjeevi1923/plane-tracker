@@ -1,6 +1,8 @@
 # PlaneTracker
 
-<img width="1360" height="632" alt="image" src="https://github.com/user-attachments/assets/741638cc-10f8-480a-8f39-f977d3b764e3" />
+<img width="1365" height="638" alt="image" src="https://github.com/user-attachments/assets/b04b9938-d32e-439c-9cc8-e451e868a2b8" />
+<img width="1363" height="633" alt="image" src="https://github.com/user-attachments/assets/ba8353fc-7bfb-4057-8281-363aca574b7c" />
+
 
 
 ## Development server
