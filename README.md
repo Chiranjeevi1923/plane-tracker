@@ -54,7 +54,7 @@ flowchart LR
 ### 3D flight view
 - **Chase camera** behind the aircraft, with orbit controls (drag to look around)
 - **Cockpit view** — first-person camera fixed on the heading, view rolls with the banking
-- **Procedural terrain** — vertex-shader displaced fbm noise, textured with CC0 photo maps and normal maps (grass / rock / snow / sand splatting by elevation and slope)
+- **Real-world terrain** — satellite imagery draped over open elevation tiles (Esri World Imagery + AWS Terrain Tiles, both keyless/no-billing), GPU-displaced in the vertex shader and anchored to the aircraft's live lat/lon so the actual ground streams past
 - **Occasional gentle banking** — the plane eases into random ±8–18° rolls between straight-flight periods
 - **Wind streaks** off the trailing edges of both wings, speed-scaled
 - **Drifting billboard clouds** with parallax scroll
@@ -88,6 +88,8 @@ ng serve
 Then open [http://localhost:4200](http://localhost:4200). No backend needed for Phase 1 — the simulator runs entirely in-browser.
 
 > The Google Maps API key must live in `src/environments/environment.ts` (git-ignored). A demo key without billing works for local dev.
+
+> The 3D view's terrain streams keyless open tiles — **Esri World Imagery** (© Esri, Maxar, Earthstar Geographics) for satellite imagery and **AWS Terrain Tiles / Mapzen** for elevation. No API key or billing account is required; the credit line rendered in the view satisfies both sources' attribution terms.
 
 ## Project structure
 

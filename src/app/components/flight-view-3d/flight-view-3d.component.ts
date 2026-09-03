@@ -24,7 +24,7 @@ import { FlightSimulatorService } from '../../services/flight-simulator.service'
 import { MapTheme, MapThemeService } from '../../services/map-theme.service';
 import { Clouds, createClouds } from './clouds';
 import { createStars, Stars } from './stars';
-import { createTerrain, Terrain, TERRAIN_Y } from './terrain';
+import { createTileTerrain, TERRAIN_BASE_Y, TileTerrain } from './terrain-tiles';
 import { createWingTrails, WingTrails } from './wing-trails';
 import { RadioService } from '../../services/radio.service';
 
@@ -71,15 +71,25 @@ const CHASE_YAW_OFFSET_DEG = 0;
 const CHASE_LERP = 0.06;
 
 /**
- * World-scroll ("moving plane" illusion): the plane stays at the origin while
- * the terrain + clouds sweep past it. Rate scales with the plane's speed
- * relative to REFERENCE_SPEED_KTS.
+ * Cloud-scroll ("moving plane" illusion): the plane stays at the origin while
+ * the clouds sweep past it. Rate scales with the plane's speed relative to
+ * REFERENCE_SPEED_KTS. (The real-tile terrain no longer scrolls by an arbitrary
+ * offset — it's anchored to the aircraft's true lat/lon each frame.)
  */
 const REFERENCE_SPEED_KTS = 2000;
-const TERRAIN_SCROLL_UNITS = 16; // world units/sec at the reference speed
-const CLOUD_SCROLL_UNITS = 8; // slower than the ground → parallax depth
-/** Rotate the scroll direction if the world flows the wrong way (try ±90/180). */
+const CLOUD_SCROLL_UNITS = 8; // parallax layer above the streaming ground
+/** Rotate the cloud flow direction if it sweeps the wrong way (try ±90/180). */
 const FLOW_YAW_OFFSET_DEG = 0;
+
+/**
+ * The simulator cruises at 2000–3500 kts (deliberately fast for the 2D map). At
+ * real map-tile scale that would thrash the tile grid, so the 3D view samples the
+ * simulator through a slowed clock: `sample()` is a pure function of the
+ * timestamp we pass it, so scaling elapsed time here slows position/heading/
+ * altitude together WITHOUT touching the shared service or the 2D map. 0.15 →
+ * ~300–525 kts apparent groundspeed (jet-realistic).
+ */
+const VISUAL_TIME_SCALE = 0.15;
 
 /**
  * Occasional banking (roll about the fuselage): mostly level, but every few
@@ -137,10 +147,18 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
     }
     return (
       this.simulator
-        .sample(Date.now())
+        .sample(this.simClock())
         .find((plane) => plane.flightId === this.flightId) ?? null
     );
   });
+
+  /**
+   * Slowed simulator timestamp for the 3D view: scales elapsed wall time so real
+   * map tiles don't thrash. The 2D map keeps sampling with the real clock.
+   */
+  private simClock(): number {
+    return this.viewT0 + (Date.now() - this.viewT0) * VISUAL_TIME_SCALE;
+  }
 
   readonly modelState = signal<ModelState>('loading');
   /** Radio chatter is off by default; the top-right toggle unmutes it. */
@@ -161,7 +179,7 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
   private camera?: THREE.PerspectiveCamera;
   private controls?: OrbitControls;
   private model?: THREE.Group; // pivot group; rotated to heading
-  private terrain?: Terrain;
+  private terrain?: TileTerrain;
   private clouds?: Clouds;
   /** Wind streaks off the wings; lives in the bank group so it rolls too. */
   private wingTrails?: WingTrails;
@@ -175,9 +193,10 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
   /** Chase follows the plane until the user first orbits, then hands over. */
   private chaseEnabled = true;
   private readonly desiredCamPos = new THREE.Vector3();
-  /** Accumulated terrain noise offset + a scratch cloud velocity (scroll effect). */
-  private readonly noiseOffset = new THREE.Vector2();
+  /** Scratch cloud velocity for the parallax scroll effect. */
   private readonly cloudVelocity = new THREE.Vector3();
+  /** Wall-clock origin for the slowed simulator clock (see VISUAL_TIME_SCALE). */
+  private readonly viewT0 = Date.now();
   /** Occasional-bank state (roll applied to bankGroup, nested in the pivot). */
   private bankGroup?: THREE.Group;
   private bankAngle = 0;
@@ -256,6 +275,9 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
     this.clouds?.dispose();
     this.wingTrails?.dispose();
     this.stars?.dispose();
+    // The tile terrain owns imagery/height textures the traverse above doesn't
+    // reach — dispose it explicitly so re-entering the view doesn't leak GPU memory.
+    this.terrain?.dispose();
     this.renderer?.dispose();
     // Radio chatter belongs to the 3D view — silence it when leaving.
     this.radio.disableRadio();
@@ -264,6 +286,11 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
   /** Return to the 2D map. */
   back(): void {
     this.router.navigate(['/']);
+  }
+
+  /** Jump to the Google vector 3D prototype for the same flight (comparison). */
+  goToMap3d(): void {
+    this.router.navigate(['/map3d-view', this.flightId]);
   }
 
   private initScene(): void {
@@ -288,10 +315,13 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
     this.sun.position.set(14, 22, 10);
     this.scene.add(this.sun);
 
-    // Procedural rolling-hills terrain below the aircraft.
-    this.terrain = createTerrain(this.mapTheme.theme());
-    this.terrain.mesh.position.y = TERRAIN_Y;
-    this.scene.add(this.terrain.mesh);
+    // Real-world terrain below the aircraft: satellite imagery draped over open
+    // elevation tiles (Esri World Imagery + AWS Terrain Tiles, keyless). setView
+    // anchors it to the live lat/lon each frame; TERRAIN_BASE_Y is just the
+    // pre-load resting position.
+    this.terrain = createTileTerrain(this.mapTheme.theme(), this.renderer);
+    this.terrain.group.position.y = TERRAIN_BASE_Y;
+    this.scene.add(this.terrain.group);
 
     // Drifting billboard clouds for atmosphere.
     this.clouds = createClouds(this.mapTheme.theme());
@@ -323,7 +353,7 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
       let speedKts = 0;
       if (this.model && this.flightId) {
         const plane = this.simulator
-          .sample(Date.now())
+          .sample(this.simClock())
           .find((p) => p.flightId === this.flightId);
         if (plane) {
           // Heading is compass degrees (CW from north); Three yaw is CCW.
@@ -331,6 +361,8 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
             MODEL_YAW_OFFSET_DEG - plane.heading,
           );
           speedKts = plane.speed;
+          // Anchor the real-world terrain to the aircraft's live position.
+          this.terrain?.setView(plane.latitude, plane.longitude, plane.altitude);
         }
       }
       this.updateWorldScroll(dt, speedKts);
@@ -487,12 +519,10 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
   }
 
   /**
-   * "Moving plane" illusion. The plane is fixed at the origin; instead we scroll
-   * the world past it along the flight direction:
-   *  - Terrain: advance a noise-offset uniform (infinite, no geometry rebuild) so
-   *    hills flow backward past the plane.
-   *  - Clouds: translate the opposite way (toward the tail) and wrap.
-   * Both scale with the plane's speed.
+   * Cloud parallax for the "moving plane" illusion. The plane is fixed at the
+   * origin and the terrain is anchored to its real position (see setView), so
+   * this only sweeps the clouds toward the tail, scaled by speed, for a sense of
+   * motion and depth above the streaming ground.
    */
   private updateWorldScroll(dt: number, speedKts: number): void {
     if (!this.model) {
@@ -503,11 +533,6 @@ export class FlightView3dComponent implements AfterViewInit, OnDestroy {
       this.model.rotation.y + THREE.MathUtils.degToRad(FLOW_YAW_OFFSET_DEG);
     const fwdX = Math.sin(yaw);
     const fwdZ = Math.cos(yaw);
-
-    // Terrain: move the noise sample forward → the surface flows backward.
-    this.noiseOffset.x += fwdX * TERRAIN_SCROLL_UNITS * factor * dt;
-    this.noiseOffset.y += fwdZ * TERRAIN_SCROLL_UNITS * factor * dt;
-    this.terrain?.setOffset(this.noiseOffset.x, this.noiseOffset.y);
 
     // Clouds: sweep toward the tail (opposite the flight direction).
     this.cloudVelocity

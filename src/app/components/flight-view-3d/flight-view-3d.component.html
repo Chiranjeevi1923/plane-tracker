@@ -17,6 +17,24 @@
   <span>Back</span>
 </button>
 
+<button type="button" class="v3d__compare" (click)="goToMap3d()">
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M3 21l6-4 6 4 6-4V3l-6 4-6-4-6 4z" />
+    <path d="M9 3v14M15 7v14" />
+  </svg>
+  <span>Google 3D</span>
+</button>
+
 <button
   type="button"
   class="v3d__theme"
@@ -166,4 +184,9 @@
   } @else {
     Drag to orbit · scroll to zoom
   }
+</p>
+
+<p class="v3d__attribution">
+  Imagery © Esri, Maxar, Earthstar Geographics · Elevation: AWS Terrain Tiles /
+  Mapzen
 </p>

@@ -12,9 +12,10 @@ import { Routes } from '@angular/router';
  *                           reads it on init and writes it back on `idle`
  *                           (i.e. after every pan/zoom settles)
  *   /3d-view/:flightId      full-screen 3D overlay for one aircraft
+ *   /map3d-view/:flightId   prototype: Google vector 3D (WebGLOverlayView) view
  *
- * Route order matters: the 3D view is matched FIRST so its two-segment URL
- * doesn't fall into the generic `:coords/:zoom` pattern below. If a URL like
+ * Route order matters: the 3D views are matched FIRST so their two-segment URLs
+ * don't fall into the generic `:coords/:zoom` pattern below. If a URL like
  * `/foo/bar` matches `:coords/:zoom` but doesn't parse as coords, MapComponent
  * simply falls back to fitBounds and overwrites the URL on the first idle.
  */
@@ -24,6 +25,13 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./components/flight-view-3d/flight-view-3d.component').then(
         (m) => m.FlightView3dComponent,
+      ),
+  },
+  {
+    path: 'map3d-view/:flightId',
+    loadComponent: () =>
+      import('./components/flight-view-map3d/flight-view-map3d.component').then(
+        (m) => m.FlightViewMap3dComponent,
       ),
   },
   // Map view URL — no component in the outlet; the map lives in AppComponent

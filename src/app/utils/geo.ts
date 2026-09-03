@@ -98,6 +98,38 @@ export function bearing(from: LatLng, to: LatLng): number {
   return (toDegrees(Math.atan2(y, x)) + 360) % 360;
 }
 
+/** Earth's mean radius in metres (for metric destination-point offsets). */
+const EARTH_RADIUS_M = 6_371_000;
+
+/**
+ * Point reached by travelling `distanceM` metres from `from` along the initial
+ * great-circle `bearingDeg` (compass degrees). Used by the 3D camera to aim a
+ * short distance ahead of the aircraft along its heading.
+ */
+export function destinationPoint(
+  from: LatLng,
+  bearingDeg: number,
+  distanceM: number,
+): LatLng {
+  const angular = distanceM / EARTH_RADIUS_M; // angular distance (radians)
+  const theta = toRadians(bearingDeg);
+  const lat1 = toRadians(from.latitude);
+  const lon1 = toRadians(from.longitude);
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(angular) +
+      Math.cos(lat1) * Math.sin(angular) * Math.cos(theta),
+  );
+  const lon2 =
+    lon1 +
+    Math.atan2(
+      Math.sin(theta) * Math.sin(angular) * Math.cos(lat1),
+      Math.cos(angular) - Math.sin(lat1) * Math.sin(lat2),
+    );
+
+  return { latitude: toDegrees(lat2), longitude: toDegrees(lon2) };
+}
+
 /**
  * Great-circle distance between two points in nautical miles (haversine).
  * Used to convert `speed` (knots) into progress along a route per tick.
